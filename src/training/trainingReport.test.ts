@@ -50,6 +50,36 @@ describe("buildTrainingReport", () => {
     expect(report).toContain("Missed titles to detect (1):");
     expect(report).toContain('- "Swamp" [50, 60, 120, 28]');
     expect(report).toContain("Unreviewed detections (not labeled): 1");
+    expect(report).toContain("Notes (0):");
+    expect(report).toContain("- none");
+  });
+
+  it("includes notes for detections and added regions", () => {
+    const report = buildTrainingReport({
+      ...base,
+      detections: [
+        {
+          detectedText: "Lightning Bolt",
+          name: "Lightning Bolt",
+          box: { x: 10, y: 20, width: 100, height: 24 },
+          verdict: "correct",
+          note: "glare on the title",
+        },
+      ],
+      added: [
+        {
+          box: { x: 50, y: 60, width: 120, height: 28 },
+          text: "Swamp",
+          note: "partially covered",
+        },
+      ],
+    });
+
+    expect(report).toContain("Notes (2):");
+    expect(report).toContain(
+      '- "Lightning Bolt" [10, 20, 100, 24]: "glare on the title"',
+    );
+    expect(report).toContain('- "Swamp" [50, 60, 120, 28]: "partially covered"');
   });
 
   it("ignores corrected/added entries with empty text", () => {

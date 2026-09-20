@@ -936,6 +936,22 @@ input {
   color: #ffd5d5;
 }
 
+.training-editor-actions button.is-note {
+  background: var(--bg-2);
+  color: var(--ink);
+}
+
+.training-note {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
 .training-report textarea {
   width: 100%;
   border: 1px solid var(--line);

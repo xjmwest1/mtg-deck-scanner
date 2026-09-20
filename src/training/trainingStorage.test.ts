@@ -41,10 +41,15 @@ describe("trainingStorage", () => {
     ];
 
     const persisted = buildPersistedLabels("sample.jpg", 1024, 768, detections, {
-      a: { verdict: "correct" },
+      a: { verdict: "correct", note: "easy read" },
       b: { verdict: "not-card" },
     }, [
-      { id: "added-1", box: { x: 50, y: 60, width: 120, height: 28 }, text: "Swamp" },
+      {
+        id: "added-1",
+        box: { x: 50, y: 60, width: 120, height: 28 },
+        text: "Swamp",
+        note: "bottom row",
+      },
     ]);
 
     expect(persisted.detections).toHaveLength(2);
@@ -58,10 +63,28 @@ describe("trainingStorage", () => {
 
     const applied = applyPersistedLabels(shifted, 1024, 768, persisted);
     expect(applied.restoredCount).toBe(3);
-    expect(applied.annotations["new-a"]).toEqual({ verdict: "correct" });
+    expect(applied.annotations["new-a"]).toEqual({ verdict: "correct", note: "easy read" });
     expect(applied.annotations["new-b"]).toEqual({ verdict: "not-card" });
     expect(applied.added).toHaveLength(1);
     expect(applied.added[0]?.text).toBe("Swamp");
+    expect(applied.added[0]?.note).toBe("bottom row");
+  });
+
+  it("persists unreviewed detections when they only have a note", () => {
+    const detections = [detection("a", { x: 10, y: 20, width: 100, height: 24 })];
+
+    const persisted = buildPersistedLabels("sample.jpg", 1024, 768, detections, {
+      a: { verdict: "unreviewed", note: "needs another look" },
+    }, []);
+
+    expect(persisted.detections).toHaveLength(1);
+    expect(persisted.detections[0]?.note).toBe("needs another look");
+
+    const applied = applyPersistedLabels(detections, 1024, 768, persisted);
+    expect(applied.annotations.a).toEqual({
+      verdict: "unreviewed",
+      note: "needs another look",
+    });
   });
 
   it("skips saved labels that no longer overlap any detection", () => {

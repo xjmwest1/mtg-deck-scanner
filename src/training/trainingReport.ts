@@ -7,11 +7,13 @@ export type ReportDetection = {
   box: Rect;
   verdict: TrainingVerdict;
   correctedText?: string;
+  note?: string;
 };
 
 export type ReportAddedRegion = {
   box: Rect;
   text: string;
+  note?: string;
 };
 
 export type TrainingReportInput = {
@@ -39,6 +41,8 @@ export function buildTrainingReport(input: TrainingReportInput): string {
   const falsePositives = input.detections.filter((d) => d.verdict === "not-card");
   const unreviewed = input.detections.filter((d) => d.verdict === "unreviewed");
   const added = input.added.filter((region) => region.text.trim().length > 0);
+  const notedDetections = input.detections.filter((d) => (d.note ?? "").trim().length > 0);
+  const notedAdded = input.added.filter((region) => (region.note ?? "").trim().length > 0);
 
   const lines: string[] = [];
   lines.push(
@@ -99,6 +103,21 @@ export function buildTrainingReport(input: TrainingReportInput): string {
     lines.push(`Unreviewed detections (not labeled): ${unreviewed.length}`);
     lines.push("");
   }
+
+  const noteCount = notedDetections.length + notedAdded.length;
+  lines.push(`Notes (${noteCount}):`);
+  if (noteCount === 0) {
+    lines.push("- none");
+  } else {
+    for (const d of notedDetections) {
+      lines.push(`- "${currentLabel(d)}" ${fmtBox(d.box)}: "${(d.note ?? "").trim()}"`);
+    }
+    for (const region of notedAdded) {
+      const label = region.text.trim() || "(unnamed region)";
+      lines.push(`- "${label}" ${fmtBox(region.box)}: "${(region.note ?? "").trim()}"`);
+    }
+  }
+  lines.push("");
 
   lines.push(
     "Use the corrected and missed items as ground truth: adjust title candidate filtering, " +
