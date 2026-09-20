@@ -24,3 +24,14 @@ pnpm-debug.log*
 .idea/
 .vscode/
 *.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# TypeScript
+*.tsbuildinfo
+
+# Downloaded runtime assets
+public/models/
+public/card-names.json
