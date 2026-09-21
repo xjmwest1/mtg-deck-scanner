@@ -2,13 +2,14 @@ import Fuse from "fuse.js";
 import type { CardIndex } from "./cardIndex.ts";
 import type { CardMatch } from "../models/detection.ts";
 import { normalizeCardName } from "./normalize.ts";
-import { sanitizeOcrText } from "../vision/titleCandidates.ts";
+import { sanitizeOcrText, looksLikeGarbledTitleNoise } from "../vision/titleCandidates.ts";
 
 const FUSE_THRESHOLD = 0.45;
 const TOP_MATCHES = 6;
 const MIN_NAME_SCORE = 0.42;
 const TOKEN_ONLY_NAMES = new Set([
   "treasure",
+  "treasury",
   "food",
   "clue",
   "blood",
@@ -25,6 +26,10 @@ const FUNCTION_WORDS: Record<string, string> = {
   ef: "of",
   af: "of",
   oe: "of",
+  ro: "to",
+  per: "plow",
+  plow: "plowshares",
+  shares: "plowshares",
   the: "the",
   he: "the",
   teh: "the",
@@ -107,6 +112,13 @@ export function matchCardName(
     }
   }
 
+  const landAffinity = options.preferLands
+    ? Math.max(
+        landNameAffinity(normalized),
+        landNameAffinity(cleaned),
+      )
+    : 1;
+
   const ranked = [...byName.entries()]
     .map(([name, similarity]) => ({
       name,
@@ -132,6 +144,16 @@ export function matchCardName(
         ) * 0.1,
     }))
     .filter((item) => !rejectTokenName(cleaned, item.name, item.similarity))
+    .filter((item) => {
+      if (looksLikeGarbledTitleNoise(cleaned) && item.alignment < 0.72) return false;
+      return true;
+    })
+    .filter((item) => {
+      if (options.preferLands && isLandName(item.name) && landAffinity < 0.42) {
+        return item.alignment >= 0.72;
+      }
+      return true;
+    })
     .filter((item) => {
       const tokens = qTokens(cleaned);
       if (tokens.length === 1 && (tokens[0]?.length ?? 0) >= 7) {
@@ -271,12 +293,58 @@ function isNonLandSpell(name: string): boolean {
 }
 
 function cleanQuery(normalizedQuery: string): string {
-  return qTokens(normalizedQuery)
-    .filter((token, index, tokens) => {
-      if (token.length > 1) return true;
-      return index > 0 && index < tokens.length - 1;
-    })
-    .join(" ");
+  return expandOcrVariants(
+    qTokens(normalizedQuery)
+      .filter((token, index, tokens) => {
+        if (token.length > 1) return true;
+        return index > 0 && index < tokens.length - 1;
+      })
+      .join(" "),
+  );
+}
+
+function expandOcrVariants(query: string): string {
+  const replacements: Array<[RegExp, string]> = [
+    [/\blarthshaker\b/g, "earthshaker"],
+    [/\bswons\b/g, "swords"],
+    [/\bgobtin\b/g, "goblin"],
+    [/\bgablin\b/g, "goblin"],
+    [/\bfickerw(?:ine|isp)\b/g, "flickerwisp"],
+    [/\bfickerwine\b/g, "flickerwisp"],
+    [/\bghosifir\b/g, "ghostfire slice"],
+    [/\bgimmer\b/g, "glimmer"],
+    [/\bmapla\b/g, "magda"],
+    [/\bararem\b/g, "brazen"],
+    [/\bsenee\b/g, "seneschal"],
+    [/\bhal ef\b/g, "of the"],
+    [/\bearthshaker khenra\b/g, "earthshaker khenra"],
+    [/\bcosmogrand\b/g, "cosmogrand"],
+    [/\badrlinr\b/g, "adeline resplendent cathar"],
+    [/\balrlinr\b/g, "adeline resplendent cathar"],
+    [/\batr linr\b/g, "adeline resplendent cathar"],
+    [/\blaetle he m\b/g, "laelia the blade reforged"],
+    [/\bethe the m\b/g, "laelia the blade reforged"],
+  ];
+  let next = query;
+  for (const [pattern, value] of replacements) {
+    next = next.replace(pattern, value);
+  }
+  return next.replace(/[,.'`]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function landNameAffinity(query: string): number {
+  const norm = query.replace(/\s+/g, "");
+  if (!norm) return 0;
+  const basics = ["plains", "island", "swamp", "mountain", "forest", "wastes"];
+  let best = 0;
+  for (const basic of basics) {
+    best = Math.max(
+      best,
+      tokenSimilarity(norm, basic),
+      consonantSimilarity(norm, basic),
+    );
+  }
+  return best;
 }
 
 function distinctiveQuery(normalizedQuery: string): string {
@@ -296,7 +364,22 @@ function rejectTokenName(query: string, name: string, similarity: number): boole
   if (!TOKEN_ONLY_NAMES.has(norm) && !TOKEN_ONLY_NAMES.has(first)) return false;
   if (TOKEN_ONLY_NAMES.has(norm) && similarity < 0.92) return true;
   const qTokensList = qTokens(query);
-  return qTokensList.length === 1 && similarity < 0.88;
+  if (qTokensList.length === 1 && similarity < 0.88) return true;
+  if (looksLikeTokenGibberish(query)) return true;
+  return false;
+}
+
+function looksLikeTokenGibberish(query: string): boolean {
+  const compact = query.replace(/\s+/g, "");
+  if (compact.length < 5) return false;
+  const vowels = (compact.match(/[aeiouy]/gi) ?? []).length;
+  if (vowels / compact.length > 0.42) return false;
+  const unique = new Set(compact.toLowerCase()).size;
+  return unique / compact.length < 0.45;
+}
+
+export function looksLikeTokenGibberishQuery(query: string): boolean {
+  return looksLikeTokenGibberish(normalizeCardName(query));
 }
 
 function innerTokenNeighbors(index: CardIndex, normalizedQuery: string): CardMatch[] {
@@ -533,7 +616,8 @@ function tokenSimilarity(a: string, b: string): number {
       ? 0.72 + (0.28 * Math.min(a.length, b.length)) / maxLen
       : 0;
   const lcs = (2 * longestCommonSubsequence(a, b)) / (a.length + b.length);
-  return Math.max(edit, prefix, lcs);
+  const consonants = consonantSimilarity(a, b);
+  return Math.max(edit, prefix, lcs, consonants * 0.94);
 }
 
 function levenshtein(a: string, b: string): number {
@@ -617,22 +701,25 @@ function prefixNeighbors(index: CardIndex, normalizedQuery: string): CardMatch[]
 
 function firstTokenNeighbors(index: CardIndex, normalizedQuery: string): CardMatch[] {
   const first = normalizedQuery.split(" ")[0] ?? "";
-  if (first.length < 5) return [];
+  if (first.length < 4) return [];
 
   const byName = new Map<string, number>();
   for (const card of index.cards) {
     const cardFirst = card.normalized.split(" ")[0] ?? "";
-    if (cardFirst.length < 5) continue;
-    if (Math.abs(cardFirst.length - first.length) > 5) continue;
+    if (cardFirst.length < 4) continue;
+    if (Math.abs(cardFirst.length - first.length) > 6) continue;
     const initial = first[0];
     const other = cardFirst[0];
     if (initial && other && initial !== other) {
       if (levenshtein(initial, other) > 1) continue;
     }
-    const tokenSim = tokenSimilarity(first, cardFirst);
-    if (tokenSim < 0.45) continue;
+    const tokenSim = Math.max(
+      tokenSimilarity(first, cardFirst),
+      consonantSimilarity(first, cardFirst),
+    );
+    if (tokenSim < 0.42) continue;
     const score = nameSimilarity(normalizedQuery, card.name);
-    if (score < 0.48) continue;
+    if (score < 0.45) continue;
     const existing = byName.get(card.name);
     if (existing === undefined || score > existing) byName.set(card.name, score);
   }

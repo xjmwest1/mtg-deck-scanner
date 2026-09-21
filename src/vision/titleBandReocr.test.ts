@@ -123,7 +123,7 @@ describe("planTitleBandRects", () => {
         item.rect.y < 240,
     );
     const mountainBand = planned.filter(
-      (item) => item.reason === "land-row" && item.rect.x >= 600,
+      (item) => item.reason === "land-row" && item.rect.x >= 580,
     );
 
     expect(aboveInti.length).toBeGreaterThan(0);

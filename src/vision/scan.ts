@@ -1,5 +1,5 @@
 import { loadCardIndex } from "../cards/cardIndex.ts";
-import { matchCardName } from "../cards/fuzzyMatch.ts";
+import { matchCardName, nameSimilarity, looksLikeTokenGibberishQuery } from "../cards/fuzzyMatch.ts";
 import { isBasicLand } from "../models/deck.ts";
 import type { CardDetection, DetectionStatus } from "../models/detection.ts";
 import { normalizeCardName } from "../cards/normalize.ts";
@@ -11,6 +11,7 @@ import { expectedNamesForFilename } from "./sampleCatalog.ts";
 import { traceExpectedCards, type ScanDebug } from "./scanDebug.ts";
 import {
   bodyTextReason,
+  looksLikeGarbledTitleNoise,
   sanitizeOcrText,
   selectTitleCandidates,
   titleFilterReason,
@@ -155,6 +156,7 @@ export function suppressOverlapping(
 
 const TOKEN_ONLY_NAMES = new Set([
   "treasure",
+  "treasury",
   "food",
   "clue",
   "blood",
@@ -179,9 +181,24 @@ function dropTokenDetections(
       suppressed.push(detection);
       continue;
     }
+    if (looksLikeTokenOcr(detection.detectedText, detection.name)) {
+      suppressed.push(detection);
+      continue;
+    }
     kept.push(detection);
   }
   return kept;
+}
+
+function looksLikeTokenOcr(detectedText: string, name?: string): boolean {
+  const text = normalizeCardName(detectedText);
+  if (!text || text.length < 4) return false;
+  const norm = normalizeCardName(name ?? "");
+  const first = norm.split(" ")[0] ?? "";
+  if (!TOKEN_ONLY_NAMES.has(norm) && !TOKEN_ONLY_NAMES.has(first)) return false;
+  if (looksLikeTokenGibberishQuery(detectedText)) return true;
+  const similarity = nameSimilarity(text, name ?? detectedText);
+  return similarity < 0.72;
 }
 
 function dropLandOracleRereads(
@@ -232,6 +249,17 @@ function dropWeakUnknowns(
     if (bodyTextReason(detection.detectedText)) {
       suppressed.push(detection);
       continue;
+    }
+    if (looksLikeGarbledTitleNoise(detection.detectedText)) {
+      suppressed.push(detection);
+      continue;
+    }
+    if (detection.status !== "confirmed" && detection.confidence < 0.78) {
+      const words = detection.detectedText.trim().split(/\s+/).filter(Boolean);
+      if (words.length >= 3 && words.some((word) => word.length >= 8 && /[A-Z]/.test(word) && /[a-z]/.test(word))) {
+        suppressed.push(detection);
+        continue;
+      }
     }
     const columnNeighbor = detections.some(
       (other) =>
@@ -327,10 +355,8 @@ function shouldKeepDetection(
   if (bodyTextReason(detection.detectedText)) return false;
 
   if (isBodyOfAnyTitleAbove(detection, all)) {
-    const peers = titleRowPeers(detection, all).filter(
-      (peer) => peer.boundingBox.height >= 13,
-    );
-    if (peers.length >= 1 && box.height >= 10) return true;
+    const peers = titleRowPeers(detection, all);
+    if (peers.length >= 1 && box.height >= 12) return true;
     return false;
   }
 
@@ -338,11 +364,38 @@ function shouldKeepDetection(
   if (!above) return true;
 
   const peers = titleRowPeers(detection, all);
-  if (peers.length >= 1) return true;
+  if (peers.length >= 1 && box.height >= 12) return true;
 
-  const pitch = box.y - above.boundingBox.y;
+  const anchor = nearestSubstantialAbove(detection, all) ?? above;
+  const pitch = box.y - anchor.boundingBox.y;
   if (pitch < 88) return true;
+  if (
+    detection.name &&
+    detection.status !== "unknown" &&
+    box.height <= 12 &&
+    pitch < 132 &&
+    normalizeCardName(detection.detectedText) !== normalizeCardName(detection.name)
+  ) {
+    return true;
+  }
   return false;
+}
+
+function nearestSubstantialAbove(
+  detection: CardDetection,
+  all: CardDetection[],
+): CardDetection | undefined {
+  const box = detection.boundingBox;
+  let best: CardDetection | undefined;
+  for (const other of all) {
+    if (other === detection) continue;
+    if (other.boundingBox.y + other.boundingBox.height > box.y) continue;
+    if (horizontalOverlapRatio(box, other.boundingBox) < 0.28) continue;
+    if (other.boundingBox.height < 12 && other.confidence < 0.84) continue;
+    if (looksLikeGarbledTitleNoise(other.detectedText)) continue;
+    if (!best || other.boundingBox.y > best.boundingBox.y) best = other;
+  }
+  return best;
 }
 
 function looksLikeLandTitle(detection: CardDetection): boolean {
@@ -375,8 +428,10 @@ function isBodyOfCardAbove(detection: CardDetection, above: CardDetection): bool
   const gap = box.y - (parent.y + parent.height);
   const widthRatio = box.width / Math.max(1, parent.width);
   const heightRatio = box.height / Math.max(1, parent.height);
-  if (widthRatio > 1.35 && gap >= 36 && box.height <= parent.height + 1) return true;
-  if (box.height <= 11 && parent.height >= 13 && gap >= 40) return true;
+  if (widthRatio > 1.35 && gap >= 36 && gap <= 78 && box.height <= parent.height + 1) {
+    return true;
+  }
+  if (box.height <= 11 && parent.height >= 13 && gap >= 40 && gap <= 72) return true;
   if (gap >= 85 && heightRatio <= 0.85 && widthRatio >= 0.9) return true;
   return false;
 }
@@ -384,7 +439,9 @@ function isBodyOfCardAbove(detection: CardDetection, above: CardDetection): bool
 function titleRowPeers(detection: CardDetection, all: CardDetection[]): CardDetection[] {
   return rowPeers(detection, all).filter((peer) => {
     if (bodyTextReason(peer.detectedText)) return false;
+    if (looksLikeGarbledTitleNoise(peer.detectedText)) return false;
     if (peer.detectedText.trim().split(/\s+/).length > 5) return false;
+    if (peer.boundingBox.height <= 10 && peer.confidence < 0.82) return false;
     const dx = Math.abs(
       peer.boundingBox.x +
         peer.boundingBox.width / 2 -

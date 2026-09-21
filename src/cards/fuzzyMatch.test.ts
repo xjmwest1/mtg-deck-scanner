@@ -144,6 +144,7 @@ describe("matchCardName", () => {
       "Little Girl",
       "Treasure",
       "Treasure Cruise",
+      "Treasury Thrull",
       "Mother of Runes",
       "Student of Warfare",
       "Thalia, Guardian of Thraben",
@@ -153,6 +154,8 @@ describe("matchCardName", () => {
       "Flametongue Kavu",
       "Nova Hellkite",
       "Goblin Rabblemaster",
+      "Swords to Plowshares",
+      "Earthshaker Khenra",
       "Mountain",
       "Lightning Bolt",
     ]);
@@ -163,6 +166,12 @@ describe("matchCardName", () => {
     expect(matchCardName(index, "Laetle he m", 0.7).best?.name).toBe(
       "Laelia, the Blade Reforged",
     );
-    expect(matchCardName(index, "TUEASURI", 0.7).best?.name).not.toBe("Treasure");
+    expect(matchCardName(index, "TUEASURI", 0.7).best?.name).not.toBe("Treasury Thrull");
+    expect(matchCardName(index, "TUEASURI", 0.7).matches).toHaveLength(0);
+    expect(matchCardName(index, "Gablin", 0.75).best?.name).toBe("Goblin Rabblemaster");
+    expect(matchCardName(index, "Alrlinr", 0.7).best?.name).toBe("Adeline, Resplendent Cathar");
+    expect(matchCardName(index, "s ro plowshares", 0.82).best?.name).toBe("Swords to Plowshares");
+    expect(matchCardName(index, "Larthshaker Khenra", 0.9).best?.name).toBe("Earthshaker Khenra");
+    expect(matchCardName(index, "Ghosifir", 0.7).best?.name).toBe("Ghostfire Slice");
   });
 });

@@ -234,8 +234,8 @@ function inferMissingLandRowRects(
   regions: OCRRegion[],
   columns: TitleColumn[],
 ): Rect[] {
-  const landTop = canvas.height * 0.62;
-  const landBottom = canvas.height * 0.78;
+  const landTop = canvas.height * 0.655;
+  const landBottom = canvas.height * 0.795;
   const landColumns = columns
     .map((column) => {
       const anchor = column.anchors.find(
@@ -384,7 +384,7 @@ function stackFillRects(
   }
   for (
     let y = bottom.boundingBox.y + pitch, step = 0;
-    y < landTop - 8 && step < 8;
+    y < landTop - 48 && step < 8;
     y += pitch, step += 1
   ) {
     ys.push(y);
@@ -428,7 +428,7 @@ function gapRectsInColumn(column: TitleColumn): Rect[] {
     if (!top || !bottom) continue;
     const gap = bottom.boundingBox.y - top.boundingBox.y;
     if (gap <= stackPitch * 1.55 || gap < 68) continue;
-    const steps = Math.max(1, Math.round(gap / stackPitch) - 1);
+    const steps = Math.max(1, Math.round(gap / stackPitch));
     for (let step = 1; step <= steps; step += 1) {
       const y = top.boundingBox.y + (gap * step) / (steps + 1);
       rects.push(titleBandRect(column, y, height));
@@ -479,10 +479,12 @@ function hasStrongTitleInBand(regions: OCRRegion[], rect: Rect): boolean {
 function titleBandRect(column: TitleColumn, y: number, height: number): Rect {
   const padY = Math.max(6, height * 0.45);
   const bandHeight = Math.max(height * 2.2, MIN_TITLE_BAND_HEIGHT * 0.55);
+  const columnWidth = Math.max(72, column.right - column.left);
+  const centerX = column.centerX;
   return {
-    x: column.left,
+    x: centerX - columnWidth / 2,
     y: y - padY,
-    width: Math.max(28, column.right - column.left),
+    width: columnWidth,
     height: bandHeight,
   };
 }

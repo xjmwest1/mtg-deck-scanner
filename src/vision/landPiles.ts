@@ -285,13 +285,40 @@ async function countOneLand(
 }> {
   const body = clipRect(estimateCardBody(detection.boundingBox), canvas);
   const siblings = nearbySameLands(detection, all, body).map((item) => item.id);
-  const art = clipRect(artRect(body, detection.boundingBox), canvas);
-  const rawFaces = dieFacesInRect(rawOcr, body, detection.boundingBox);
+  const title = detection.boundingBox;
+  const art = clipRect(artRect(body, title), canvas);
+  const rawFaces = dieFacesInRect(rawOcr, body, title);
   let die = pickBestDieFace(rawFaces, {
     x: art.x + art.width / 2,
     y: art.y + art.height / 2,
   });
   let note = die !== undefined ? `raw OCR ${die}` : undefined;
+
+  if (die === undefined) {
+    die = pickBestDieFace(
+      rawOcr.flatMap((region) => {
+        const value = parseDieValue(region.text);
+        if (value === undefined) return [];
+        if (!overlaps(region.boundingBox, art)) return [];
+        return [
+          {
+            value,
+            area: region.boundingBox.width * region.boundingBox.height,
+            confidence: region.confidence,
+            x: region.boundingBox.x,
+            y: region.boundingBox.y,
+            width: region.boundingBox.width,
+            height: region.boundingBox.height,
+          },
+        ];
+      }),
+      {
+        x: art.x + art.width / 2,
+        y: art.y + art.height / 2,
+      },
+    );
+    if (die !== undefined) note = `art OCR ${die}`;
+  }
 
   if (die === undefined) {
     const dieCrops = dieCropsInRect(canvas, art);
@@ -494,13 +521,19 @@ function dieFacesInRect(
   title: Rect,
 ): DieFace[] {
   const art = artRect(body, title);
+  const search = {
+    x: art.x - art.width * 0.08,
+    y: art.y - art.height * 0.05,
+    width: art.width * 1.16,
+    height: art.height * 1.1,
+  };
   return regions.flatMap((region) => {
     const value = parseDieValue(region.text);
     if (value === undefined) return [];
-    if (!overlaps(region.boundingBox, art)) return [];
+    if (!overlaps(region.boundingBox, search)) return [];
     if (iou(region.boundingBox, title) > 0.2) return [];
     const area = region.boundingBox.width * region.boundingBox.height;
-    if (area < 24 || area > art.width * art.height * 0.28) return [];
+    if (area < 16 || area > search.width * search.height * 0.35) return [];
     return [
       {
         value,

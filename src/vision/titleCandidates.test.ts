@@ -87,6 +87,9 @@ const WHITE_AGGRO_STRUCTURAL_FALSE_POSITIVES: Labeled[] = [
   ["nfhce this artface Ald one", 0, 137, 89, 16],
   ["s tri dd ha a", 477, 336, 82, 13],
   ["ftes", 481, 348, 36, 9],
+  ["Bae Chtoo cheFaguped ccatete", 295, 460, 117, 13],
+  ["AuAd", 58, 142, 19, 10],
+  ["Eeup", 293, 479, 28, 13],
 ];
 
 // Real card names OCR'd from type lines / rules / collector text. Geometry
@@ -116,6 +119,8 @@ const WHITE_AGGRO_TITLE_SHAPED_FALSE_POSITIVES: Labeled[] = [
   ["Runecarved Obelisk", 111, 614, 35, 12],
   ["Jue Cho eIaed catare", 296, 461, 104, 13],
   ["e n che floanng", 359, 719, 54, 15],
+  ["Buried Treasure", 32, 120, 27, 10],
+  ["Creature-Flemena", 479, 286, 59, 9],
 ];
 
 describe("mergeLineFragments", () => {

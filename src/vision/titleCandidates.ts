@@ -61,7 +61,9 @@ const TYPE_LINE_WORDS = [
 
 export function selectTitleCandidates(regions: OCRRegion[]): OCRRegion[] {
   const kept = regions.filter((region) => isLikelyTitle(region));
-  return mergeLineFragments(kept).filter((region) => isLikelyTitle(region));
+  return mergeLineFragments(kept)
+    .filter((region) => isLikelyTitle(region))
+    .filter((region) => !looksLikeGarbledTitleNoise(region.text));
 }
 
 export function titleFilterReason(region: OCRRegion): string | null {
@@ -91,6 +93,8 @@ export function titleFilterReason(region: OCRRegion): string | null {
   if (words.length === 1 && letters <= 4 && height <= 9 && width <= 40) {
     return "too short to be a title alone";
   }
+
+  if (looksLikeGarbledTitleNoise(text)) return "garbled fragment";
 
   const compact = text.replace(/\s+/g, "");
   const nonLetters = compact.length - countLetters(text);
@@ -130,6 +134,12 @@ export function bodyTextReason(text: string): string | null {
   if (/\badd\b/i.test(trimmed) || /\bald one\b/i.test(trimmed)) return "mana ability";
   if (/\b(enten|becomes|tapped|battlefield|turn|strike|token)\b/i.test(trimmed)) {
     return "rules phrase";
+  }
+  if (/^(?:creature|legendary|artifact|enchantment|instant|sorcery|planeswalker|egeodary)\b/i.test(trimmed)) {
+    return "looks like a type line";
+  }
+  if (/[-—]\s*[A-Za-z]{3,}/.test(trimmed) && typeLineHits(trimmed) >= 1) {
+    return "looks like a type line";
   }
   if (/\b(deals?|damage|danage|tapped|untap|target|copy)\b/i.test(trimmed)) {
     return "rules phrase";
@@ -237,16 +247,16 @@ function shouldMerge(left: OCRRegion, right: OCRRegion): boolean {
 
   // Same-font fragments only. Packed neighboring cards differ in scale and
   // sit a full space-plus apart, so they stay separate.
-  if (maxHeight === 0 || minHeight / maxHeight < 0.8) return false;
+  if (maxHeight === 0 || minHeight / maxHeight < 0.72) return false;
 
   const leftMidY = left.boundingBox.y + leftHeight / 2;
   const rightMidY = right.boundingBox.y + rightHeight / 2;
-  if (Math.abs(leftMidY - rightMidY) > maxHeight * 0.4) return false;
+  if (Math.abs(leftMidY - rightMidY) > maxHeight * 0.55) return false;
 
   const leftRightEdge = left.boundingBox.x + left.boundingBox.width;
   const gap = right.boundingBox.x - leftRightEdge;
-  const maxGap = Math.max(8, maxHeight * 0.45);
-  return gap >= -maxHeight * 0.5 && gap <= maxGap;
+  const maxGap = Math.max(10, maxHeight * 0.85);
+  return gap >= -maxHeight * 0.65 && gap <= maxGap;
 }
 
 function combineRegions(left: OCRRegion, right: OCRRegion): OCRRegion {
@@ -293,9 +303,104 @@ export function sanitizeOcrText(text: string): string {
 }
 
 function polygonAngle(region: OCRRegion): number {
+  const { width, height } = region.boundingBox;
+  if (height > 0 && height <= 24 && width / height >= 2.5) {
+    return 0;
+  }
   const [a, b] = longestEdge(region.polygon);
   if (!a || !b) return 0;
-  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  const angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  if (Math.abs(angle) > 90) return angle > 0 ? angle - 180 : angle + 180;
+  return angle;
+}
+
+export function looksLikeGarbledTitleNoise(text: string): boolean {
+  const trimmed = sanitizeOcrText(text);
+  if (!trimmed) return true;
+
+  const normalized = trimmed.toLowerCase();
+  const basics = new Set(["plains", "island", "swamp", "mountain", "forest", "wastes"]);
+  if (basics.has(normalized)) return false;
+
+  const letters = countLetters(trimmed);
+  if (letters <= 3 && trimmed.length <= 5) {
+    const compact = trimmed.replace(/\s+/g, "");
+    if (/^[A-Za-z]+$/.test(compact) && /[A-Z]/.test(compact) && /[a-z]/.test(compact)) {
+      return true;
+    }
+  }
+
+  if (trimmed.length <= 5 && /^[A-Za-z]+$/.test(trimmed.replace(/\s+/g, ""))) {
+    const caps = (trimmed.match(/[A-Z]/g) ?? []).length;
+    if (caps >= 2) return true;
+  }
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 3 && /[a-z][A-Z]/.test(trimmed)) return true;
+  if (words.length >= 4 && garbledWordRatio(trimmed) >= 0.45) return true;
+  if (words.length >= 3 && garbledWordRatio(trimmed) >= 0.6) return true;
+
+  if (words.length === 1) {
+    const word = words[0] ?? "";
+    const vowels = (word.match(/[aeiouy]/gi) ?? []).length;
+    if (word.length <= 4 && vowels <= 1) return true;
+    if (/^[A-Za-z]?[aeiouy]{2}/i.test(word)) return true;
+  }
+
+  if (words.length >= 2) {
+    const longWords = words.filter((word) => word.length >= 5);
+    const weird = longWords.filter((word) => mixedCaseRuns(word) >= 2).length;
+    if (longWords.length >= 2 && weird >= Math.ceil(longWords.length * 0.5)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function garbledWordRatio(text: string): number {
+  const rawWords = text.trim().split(/\s+/).filter(Boolean);
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 2);
+  if (words.length === 0) return 1;
+  const weird = words.filter((word, index) => {
+    const raw = rawWords[index] ?? word;
+    return (
+      junkShortWordCount(word) > 0 ||
+      mixedCaseRuns(raw) >= 1 ||
+      consonantRun(word) >= 4
+    );
+  }).length;
+  return weird / words.length;
+}
+
+function mixedCaseRuns(word: string): number {
+  let runs = 0;
+  for (let i = 1; i < word.length; i += 1) {
+    const prev = word[i - 1] ?? "";
+    const curr = word[i] ?? "";
+    if (/[a-z]/.test(prev) && /[A-Z]/.test(curr)) runs += 1;
+    if (/[A-Z]/.test(prev) && /[a-z]/.test(curr) && i > 1) runs += 1;
+  }
+  return runs;
+}
+
+function consonantRun(word: string): number {
+  const compact = word.toLowerCase().replace(/[^a-z]/g, "");
+  let best = 0;
+  let run = 0;
+  for (const char of compact) {
+    if ("aeiouy".includes(char)) {
+      run = 0;
+      continue;
+    }
+    run += 1;
+    best = Math.max(best, run);
+  }
+  return best;
 }
 
 function longestEdge(polygon: OCRRegion["polygon"]) {
