@@ -46,7 +46,10 @@ export function detectTitleLandmarksFromRgba(
   computeGradients(luma, gx, gy, workW, workH);
 
   const minWidth = Math.max(26, Math.round(workW * 0.045));
-  const maxWidth = Math.max(minWidth + 8, Math.round(Math.min(workW * 0.5, workH * 0.85)));
+  const maxWidth = Math.max(
+    minWidth + 8,
+    Math.round(Math.min(workW * 0.78, workH * 0.9)),
+  );
   const gyThresh = Math.max(10, histogramPercentile(gy, 0.84));
   const spans = collectHorizontalSpans(gy, workW, workH, gyThresh, minWidth, maxWidth);
   const paired = pairCardTopAndArtTop(spans, luma, gx, gy, workW, workH, minWidth);
@@ -424,10 +427,12 @@ function collapseNearbySpans(spans: Span[], minWidth: number): Span[] {
 
 function selectCardSizedLandmarks(landmarks: TitleLandmark[]): TitleLandmark[] {
   if (landmarks.length === 0) return [];
-  const ranked = [...landmarks].sort((a, b) => b.score - a.score);
+  const ranked = [...landmarks].sort(
+    (a, b) => b.score * Math.log(8 + b.rect.width) - a.score * Math.log(8 + a.rect.width),
+  );
   const best = ranked[0]?.score ?? 0;
-  const strong = ranked.filter((item) => item.score >= best * 0.42);
-  const widths = strong.slice(0, 10).map((item) => item.rect.width);
+  const strong = ranked.filter((item) => item.score >= best * 0.38);
+  const widths = strong.slice(0, 8).map((item) => item.rect.width);
   const typical = median(widths) || minWidthGuess(strong);
   return strong
     .filter((item) => {
@@ -454,13 +459,17 @@ function scaleDetected(landmarks: TitleLandmark[], scale: number): TitleLandmark
 }
 
 function nmsLandmarks(landmarks: TitleLandmark[]): TitleLandmark[] {
-  const ranked = [...landmarks].sort((a, b) => b.score - a.score);
+  const ranked = [...landmarks].sort(
+    (a, b) => b.score * Math.log(8 + b.rect.width) - a.score * Math.log(8 + a.rect.width),
+  );
   const kept: TitleLandmark[] = [];
   for (const item of ranked) {
     const duplicate = kept.some((other) => {
-      if (iou(item.rect, other.rect) > 0.45) return true;
-      const sameColumn = horizontalOverlapRatio(item.rect, other.rect) > 0.6;
-      return sameColumn && Math.abs(item.rect.y - other.rect.y) < 12;
+      if (iou(item.rect, other.rect) > 0.4) return true;
+      const overlap = horizontalOverlapRatio(item.rect, other.rect);
+      if (overlap < 0.4) return false;
+      const ySlack = Math.max(14, Math.min(item.rect.height, other.rect.height) * 1.05);
+      return Math.abs(item.rect.y - other.rect.y) < ySlack;
     });
     if (!duplicate) kept.push(item);
   }
