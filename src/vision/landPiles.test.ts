@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clipToPixelRect,
   countFanFromProfile,
   countPips,
   parseDieValue,
@@ -65,6 +66,16 @@ describe("pickBestDieFace", () => {
         { x: 40, y: 28 },
       ),
     ).toBe(12);
+  });
+});
+
+describe("clipToPixelRect", () => {
+  it("keeps rounded crops inside the canvas so getImageData cannot overflow", () => {
+    const clipped = clipToPixelRect({ x: 0.5, y: 0.5, width: 767.5, height: 1023.5 }, 768, 1024);
+    expect(clipped.x + clipped.width).toBeLessThanOrEqual(768);
+    expect(clipped.y + clipped.height).toBeLessThanOrEqual(1024);
+    expect(clipped.width).toBeGreaterThan(0);
+    expect(clipped.height).toBeGreaterThan(0);
   });
 });
 

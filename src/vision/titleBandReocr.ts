@@ -1,4 +1,5 @@
 import type { OCRRegion, Point, Rect } from "../models/detection.ts";
+import { yieldToUi } from "../lib/yieldToUi.ts";
 import { enhanceCanvasContrast } from "./preprocess.ts";
 import {
   bodyTextReason,
@@ -213,6 +214,7 @@ async function ocrBandRect(
 ): Promise<OCRRegion[]> {
   const crop = cropTitleBand(canvas, rect);
   if (!crop) return [];
+  await yieldToUi();
   const local = await readBand(crop.canvas);
   return local.map((region) =>
     mapRegionToCanvas(region, crop.sourceRect, crop.scale),
@@ -497,11 +499,15 @@ function cropTitleBand(
   if (clipped.width < 16 || clipped.height < 10) return null;
   const widthScale = MIN_TITLE_BAND_WIDTH / clipped.width;
   const heightScale = MIN_TITLE_BAND_HEIGHT / clipped.height;
-  const scale = Math.max(1, widthScale, heightScale);
+  const scale = Math.min(
+    Math.max(1, widthScale, heightScale),
+    1600 / clipped.width,
+    1600 / clipped.height,
+  );
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(clipped.width * scale));
   canvas.height = Math.max(1, Math.round(clipped.height * scale));
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(
@@ -594,14 +600,11 @@ function dedupeRegions(regions: OCRRegion[]): OCRRegion[] {
 }
 
 function clipRect(rect: Rect, canvas: HTMLCanvasElement): Rect {
-  const x = Math.max(0, rect.x);
-  const y = Math.max(0, rect.y);
-  return {
-    x,
-    y,
-    width: Math.max(0, Math.min(canvas.width, rect.x + rect.width) - x),
-    height: Math.max(0, Math.min(canvas.height, rect.y + rect.height) - y),
-  };
+  const x = Math.max(0, Math.min(canvas.width, Math.round(rect.x)));
+  const y = Math.max(0, Math.min(canvas.height, Math.round(rect.y)));
+  const right = Math.max(x, Math.min(canvas.width, Math.round(rect.x + rect.width)));
+  const bottom = Math.max(y, Math.min(canvas.height, Math.round(rect.y + rect.height)));
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 function overlapsBand(box: Rect, band: Rect): boolean {

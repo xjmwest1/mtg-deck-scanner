@@ -1,4 +1,5 @@
 import { explainFetchError } from "../lib/errors.ts";
+import { fileWithSniffedType } from "./preprocess.ts";
 import { loadSamplePhoto, SAMPLE_CARD_NAMES } from "./samplePhoto.ts";
 
 export type SampleKind = "generated" | "photo";
@@ -108,8 +109,8 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     id: "boros-warriors-d6-lands",
     title: "Boros warriors · d6 lands",
     blurb: "Top-down cube, three d6 on basics",
-    filename: "boros-warriors-d6-lands.png",
-    src: "/samples/boros-warriors-d6-lands.png",
+    filename: "boros-warriors-d6-lands.jpg",
+    src: "/samples/boros-warriors-d6-lands.jpg",
     kind: "photo",
     expectedNames: [
       "Archpriest of Iona",
@@ -202,8 +203,8 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     id: "wb-clerics-purple-mat",
     title: "W/B clerics · purple mat",
     blurb: "Angled columns, glare, nonbasic lands",
-    filename: "wb-clerics-purple-mat.png",
-    src: "/samples/wb-clerics-purple-mat.png",
+    filename: "wb-clerics-purple-mat.jpg",
+    src: "/samples/wb-clerics-purple-mat.jpg",
     kind: "photo",
     expectedNames: [
       "Fetid Pools",
@@ -247,9 +248,7 @@ export async function loadCatalogSample(id: string): Promise<File> {
       throw new Error(`Could not load ${sample.title} (${response.status}).`);
     }
     const blob = await response.blob();
-    return new File([blob], sample.filename, {
-      type: blob.type || "image/jpeg",
-    });
+    return fileWithSniffedType(blob, sample.filename);
   } catch (error) {
     throw explainFetchError(sample.title, error);
   }

@@ -220,6 +220,7 @@ h1 {
   border-radius: 18px;
   background: #000;
   box-shadow: var(--shadow);
+  transform: translateZ(0);
 }
 
 .processing-stage img {
@@ -245,7 +246,8 @@ h1 {
   position: absolute;
   left: 0;
   right: 0;
-  height: 22%;
+  top: 0;
+  height: 20%;
   background: linear-gradient(
     180deg,
     transparent 0%,
@@ -255,18 +257,20 @@ h1 {
     transparent 100%
   );
   box-shadow: 0 0 48px rgba(226, 192, 137, 0.22);
+  transform: translate3d(0, -100%, 0);
   animation: scan-beam 2.6s ease-in-out infinite;
+  will-change: transform;
   pointer-events: none;
 }
 
 @keyframes scan-beam {
   0%,
   100% {
-    top: -22%;
+    transform: translate3d(0, -100%, 0);
   }
 
   50% {
-    top: 100%;
+    transform: translate3d(0, 500%, 0);
   }
 }
 
@@ -324,6 +328,7 @@ h1 {
   background: var(--gold);
   box-shadow: 0 0 0 3px rgba(226, 192, 137, 0.22);
   animation: phase-pulse 1.4s ease-in-out infinite;
+  will-change: transform;
 }
 
 .turn-phase.is-current .turn-phase-label {
@@ -333,15 +338,16 @@ h1 {
 @keyframes phase-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 3px rgba(226, 192, 137, 0.22);
+    transform: scale(1);
   }
 
   50% {
-    box-shadow: 0 0 0 5px rgba(226, 192, 137, 0.1);
+    transform: scale(1.45);
   }
 }
 
 .turn-progress-track {
+  position: relative;
   height: 4px;
   border-radius: 999px;
   background: rgba(226, 192, 137, 0.14);
@@ -349,10 +355,38 @@ h1 {
 }
 
 .turn-progress-fill {
+  position: relative;
   height: 100%;
   border-radius: inherit;
+  overflow: hidden;
   background: linear-gradient(90deg, var(--gold-deep), var(--gold));
   transition: width 0.45s ease;
+}
+
+.turn-progress-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.42),
+    transparent
+  );
+  animation: progress-sheen 1.15s linear infinite;
+  will-change: transform;
+}
+
+@keyframes progress-sheen {
+  from {
+    transform: translate3d(-120%, 0, 0);
+  }
+
+  to {
+    transform: translate3d(280%, 0, 0);
+  }
 }
 
 .processing-quip {

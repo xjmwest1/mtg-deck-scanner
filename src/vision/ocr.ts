@@ -19,6 +19,7 @@ type OcrItem = {
 };
 
 let ocrPromise: Promise<OcrClient> | null = null;
+let predictQueue: Promise<unknown> = Promise.resolve();
 
 export function preloadOcr(): Promise<OcrClient> {
   if (!ocrPromise) {
@@ -66,8 +67,7 @@ async function predictRegions(
   canvas: HTMLCanvasElement,
   params: OcrPredictParams,
 ): Promise<OCRRegion[]> {
-  const ocr = await preloadOcr();
-  const [result] = await ocr.predict(canvas, params);
+  const result = await enqueuePredict(canvas, params);
 
   return (result?.items ?? []).flatMap((item) => {
     const text = (item.text ?? "").replace(/\s+/g, " ").trim();
@@ -82,6 +82,35 @@ async function predictRegions(
       },
     ];
   });
+}
+
+function enqueuePredict(
+  canvas: HTMLCanvasElement,
+  params: OcrPredictParams,
+): Promise<OcrPredictResult | undefined> {
+  const run = predictQueue.then(() => predictOnce(canvas, params));
+  predictQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function predictOnce(
+  canvas: HTMLCanvasElement,
+  params: OcrPredictParams,
+): Promise<OcrPredictResult | undefined> {
+  const ocr = await preloadOcr();
+  try {
+    const [result] = await ocr.predict(canvas, params);
+    return result;
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/worker|disposed|wasm|memory/i.test(detail)) {
+      ocrPromise = null;
+    }
+    throw explainFetchError("Reading the photo", error);
+  }
 }
 
 async function createOcr(): Promise<OcrClient> {

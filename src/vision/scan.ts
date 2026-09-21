@@ -254,7 +254,7 @@ function dropWeakUnknowns(
       suppressed.push(detection);
       continue;
     }
-    if (detection.status !== "confirmed" && detection.confidence < 0.78) {
+    if (detection.confidence < 0.78) {
       const words = detection.detectedText.trim().split(/\s+/).filter(Boolean);
       if (words.length >= 3 && words.some((word) => word.length >= 8 && /[A-Z]/.test(word) && /[a-z]/.test(word))) {
         suppressed.push(detection);

@@ -7,12 +7,52 @@ export type PreparedImage = {
 
 const MAX_SIDE = 1920;
 
-export async function prepareImage(file: File): Promise<PreparedImage> {
-  const bitmap = await createImageBitmap(file, {
-    imageOrientation: "from-image",
-  });
+export function sniffImageType(bytes: Uint8Array): string | undefined {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    return "image/gif";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return undefined;
+}
 
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+export async function fileWithSniffedType(file: Blob, filename: string): Promise<File> {
+  const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const type = sniffImageType(header) ?? file.type;
+  return new File([file], filename, { type: type || "image/jpeg" });
+}
+
+export async function prepareImage(file: File): Promise<PreparedImage> {
+  const typed = await fileWithSniffedType(file, file.name);
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(typed, {
+      imageOrientation: "from-image",
+    });
+  } catch {
+    throw new Error("Could not decode the photo. Try a JPEG or PNG.");
+  }
+
+  const scale = MAX_SIDE / Math.max(bitmap.width, bitmap.height);
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
 
@@ -21,13 +61,15 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   displayCanvas.height = height;
   const displayCtx = displayCanvas.getContext("2d");
   if (!displayCtx) throw new Error("Could not create a drawing context.");
+  displayCtx.imageSmoothingEnabled = true;
+  displayCtx.imageSmoothingQuality = "high";
   displayCtx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
   const ocrCanvas = document.createElement("canvas");
   ocrCanvas.width = width;
   ocrCanvas.height = height;
-  const ocrCtx = ocrCanvas.getContext("2d");
+  const ocrCtx = ocrCanvas.getContext("2d", { willReadFrequently: true });
   if (!ocrCtx) throw new Error("Could not create a drawing context.");
   ocrCtx.drawImage(displayCanvas, 0, 0);
   enhanceContrast(ocrCtx, width, height);
@@ -68,7 +110,7 @@ function enhanceContrast(
 }
 
 export function enhanceCanvasContrast(canvas: HTMLCanvasElement): void {
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return;
   enhanceContrast(ctx, canvas.width, canvas.height);
 }

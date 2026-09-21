@@ -1,3 +1,4 @@
+import { yieldToUi } from "../lib/yieldToUi.ts";
 import { isBasicLand } from "../models/deck.ts";
 import type { CardDetection, OCRRegion, Rect } from "../models/detection.ts";
 
@@ -221,11 +222,23 @@ export async function annotateBasicLandCounts(
     return { detections, debug: [] };
   }
 
-  const counted = await Promise.all(
-    basics.map((detection) =>
-      countOneLand(canvas, detection, detections, rawOcr, readText),
-    ),
-  );
+  const counted: Array<Awaited<ReturnType<typeof countOneLand>>> = [];
+  for (const detection of basics) {
+    await yieldToUi();
+    try {
+      counted.push(
+        await countOneLand(canvas, detection, detections, rawOcr, readText),
+      );
+    } catch {
+      counted.push({
+        detection,
+        count: 1,
+        source: "ocr",
+        note: "count failed",
+        siblings: [],
+      });
+    }
+  }
   const consumed = new Set<string>();
   const winners = [...counted].sort((a, b) => rankCount(b) - rankCount(a));
   const chosen = new Map<string, (typeof counted)[number]>();
@@ -416,12 +429,7 @@ function dieCropsInRect(
   const clipped = clipRect(rect, canvas);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx || clipped.width < 16 || clipped.height < 16) return [];
-  const image = ctx.getImageData(
-    Math.round(clipped.x),
-    Math.round(clipped.y),
-    Math.round(clipped.width),
-    Math.round(clipped.height),
-  );
+  const image = ctx.getImageData(clipped.x, clipped.y, clipped.width, clipped.height);
   const { width, height, data } = image;
   const seen = new Uint8Array(width * height);
   const blobs: Rect[] = [];
@@ -432,9 +440,10 @@ function dieCropsInRect(
     const blob = floodDie(data, seen, width, height, i);
     if (!blob) continue;
     const area = blob.w * blob.h;
-    if (area < 18 * 18 || area > width * height * 0.55) continue;
+    if (area < 18 * 18 || area > width * height * 0.22) continue;
     const ratio = blob.w / Math.max(1, blob.h);
     if (ratio < 0.55 || ratio > 1.8) continue;
+    if (blob.w > width * 0.5 || blob.h > height * 0.5) continue;
     blobs.push({
       x: clipped.x + blob.x - 8,
       y: clipped.y + blob.y - 8,
@@ -577,12 +586,7 @@ function pipsInRect(canvas: HTMLCanvasElement, rect: Rect): number {
   const clipped = clipRect(rect, canvas);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx || clipped.width < 8 || clipped.height < 8) return 0;
-  const image = ctx.getImageData(
-    Math.round(clipped.x),
-    Math.round(clipped.y),
-    Math.round(clipped.width),
-    Math.round(clipped.height),
-  );
+  const image = ctx.getImageData(clipped.x, clipped.y, clipped.width, clipped.height);
   const binary = new Uint8Array(image.width * image.height);
   let dark = 0;
   for (let i = 0; i < binary.length; i += 1) {
@@ -604,10 +608,10 @@ function grayscaleBand(
   rect: Rect,
 ): { pixels: Float32Array; width: number; height: number } | null {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx || rect.width < 8 || rect.height < 8) return null;
-  const width = Math.round(rect.width);
-  const height = Math.round(rect.height);
-  const image = ctx.getImageData(Math.round(rect.x), Math.round(rect.y), width, height);
+  const clipped = clipRect(rect, canvas);
+  if (!ctx || clipped.width < 8 || clipped.height < 8) return null;
+  const { width, height } = clipped;
+  const image = ctx.getImageData(clipped.x, clipped.y, width, height);
   const pixels = new Float32Array(width * height);
   for (let i = 0; i < pixels.length; i += 1) {
     const o = i * 4;
@@ -617,6 +621,8 @@ function grayscaleBand(
   return { pixels, width, height };
 }
 
+const MAX_CROP_SIDE = 1280;
+
 function cropAndScale(
   source: HTMLCanvasElement,
   rect: Rect,
@@ -624,7 +630,11 @@ function cropAndScale(
 ): { canvas: HTMLCanvasElement; scale: number } | null {
   const clipped = clipRect(rect, source);
   if (clipped.width < 12 || clipped.height < 12) return null;
-  const scale = Math.max(1, minWidth / clipped.width);
+  const scale = Math.min(
+    Math.max(1, minWidth / clipped.width),
+    MAX_CROP_SIDE / clipped.width,
+    MAX_CROP_SIDE / clipped.height,
+  );
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(clipped.width * scale));
   canvas.height = Math.max(1, Math.round(clipped.height * scale));
@@ -645,15 +655,20 @@ function cropAndScale(
   return { canvas, scale };
 }
 
+export function clipToPixelRect(
+  rect: Rect,
+  width: number,
+  height: number,
+): Rect {
+  const x = Math.max(0, Math.min(width, Math.round(rect.x)));
+  const y = Math.max(0, Math.min(height, Math.round(rect.y)));
+  const right = Math.max(x, Math.min(width, Math.round(rect.x + rect.width)));
+  const bottom = Math.max(y, Math.min(height, Math.round(rect.y + rect.height)));
+  return { x, y, width: right - x, height: bottom - y };
+}
+
 function clipRect(rect: Rect, canvas: HTMLCanvasElement): Rect {
-  const x = Math.max(0, rect.x);
-  const y = Math.max(0, rect.y);
-  return {
-    x,
-    y,
-    width: Math.max(0, Math.min(canvas.width, rect.x + rect.width) - x),
-    height: Math.max(0, Math.min(canvas.height, rect.y + rect.height) - y),
-  };
+  return clipToPixelRect(rect, canvas.width, canvas.height);
 }
 
 function flood(
