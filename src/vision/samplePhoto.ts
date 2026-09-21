@@ -71,13 +71,28 @@ function drawCard(ctx: CanvasRenderingContext2D, card: SampleCard): void {
   drawCardBody(ctx, card.x, card.y, width, height, "#d7c7a8");
 
   ctx.fillStyle = "#1b1612";
-  roundRect(ctx, card.x + 21, card.y + 24, 333, 66, 9);
+  roundRect(ctx, card.x + 21, card.y + 16, 333, 40, 8);
   ctx.fill();
 
   ctx.fillStyle = "#f6efe3";
-  ctx.font = "700 32px Georgia, 'Times New Roman', serif";
+  ctx.font = "700 28px Georgia, 'Times New Roman', serif";
   ctx.textBaseline = "middle";
-  ctx.fillText(card.name, card.x + 39, card.y + 57);
+  ctx.fillText(card.name, card.x + 39, card.y + 36);
+
+  const artX = card.x + 24;
+  const artY = card.y + 62;
+  const artW = 327;
+  const artH = Math.min(210, height - 90);
+  ctx.fillStyle = "#2c241c";
+  roundRect(ctx, artX, artY, artW, artH, 6);
+  ctx.fill();
+  ctx.fillStyle = card.die ? "#4a3024" : "#355f7a";
+  roundRect(ctx, artX + 6, artY + 6, artW - 12, artH - 12, 4);
+  ctx.fill();
+  ctx.strokeStyle = "#d4b26a";
+  ctx.lineWidth = 3;
+  roundRect(ctx, artX + 6, artY + 6, artW - 12, artH - 12, 4);
+  ctx.stroke();
 
   if (card.die) drawDie(ctx, card.x + 54, card.y + 150, card.die);
 }

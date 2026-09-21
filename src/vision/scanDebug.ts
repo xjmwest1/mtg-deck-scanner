@@ -24,6 +24,7 @@ export type ScanDebug = {
   suppressed: { text: string; name?: string }[];
   landCounts: LandCountDebug[];
   titleBandReocr: TitleBandReocrAttempt[];
+  titleLandmarks: { rect: Rect; score: number; cardTop: number; artTop: number }[];
   traces: CardTrace[];
 };
 

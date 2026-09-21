@@ -56,6 +56,20 @@ export function ScanDebugPanel({ debug }: ScanDebugPanelProps) {
           </ul>
         </>
       ) : null}
+      {debug.titleLandmarks && debug.titleLandmarks.length > 0 ? (
+        <>
+          <p>Title landmarks</p>
+          <ul className="raw-ocr">
+            {debug.titleLandmarks.map((item, index) => (
+              <li key={`${item.rect.x}-${item.rect.y}-${index}`}>
+                band @ ({Math.round(item.rect.x)}, {Math.round(item.rect.y)}){" "}
+                {Math.round(item.rect.width)}×{Math.round(item.rect.height)} · top{" "}
+                {Math.round(item.cardTop)} → art {Math.round(item.artTop)}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {debug.titleBandReocr && debug.titleBandReocr.length > 0 ? (
         <>
           <p>Title-band re-OCR</p>
