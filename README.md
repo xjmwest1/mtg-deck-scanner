@@ -41,7 +41,8 @@ This app is static (Vite build) and runs fully in the browser, so it can be host
 ### One-time repo setup
 
 1. Open the repository on GitHub → **Settings** → **Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not “Deploy from a branch”).  
+   If **Source** is still **main** / root, GitHub serves the raw repo `index.html`, which references `/src/main.tsx` and shows a blank page.
 
 ### Deploy
 
@@ -55,3 +56,12 @@ npm run preview
 ```
 
 Then open the URL shown by `vite preview` (paths are rooted at `/mtg-deck-scanner/`).
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| Blank white page | Pages **Source** is “Deploy from a branch” instead of **GitHub Actions**, or the deploy workflow failed. Check **Actions → Deploy to GitHub Pages**. |
+| 404 on `/assets/...` | Built app expects base path `/mtg-deck-scanner/`; confirm the workflow sets `VITE_BASE_PATH`. |
+
+After fixing **Source**, re-run **Deploy to GitHub Pages** from the Actions tab.
