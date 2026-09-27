@@ -30,3 +30,28 @@ npm run dev
 The first scan downloads the OCR model and a local card-name catalog. After that, recognition stays on-device.
 
 The home screen includes a few bundled samples: a generated overlapping-column layout, plus real photos of a cube on a playmat and fanned title bars. Sources and licenses are in [`public/samples/SOURCES.md`](./public/samples/SOURCES.md).
+
+## GitHub Pages
+
+This app is static (Vite build) and runs fully in the browser, so it can be hosted on [GitHub Pages](https://pages.github.com/).
+
+**Live site:** after deployment is enabled, the app is served at  
+`https://xjmwest1.github.io/mtg-deck-scanner/`
+
+### One-time repo setup
+
+1. Open the repository on GitHub → **Settings** → **Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+
+### Deploy
+
+Pushes to `main` run [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml), which downloads OCR assets, builds with base path `/mtg-deck-scanner/`, and publishes `dist/` to Pages. You can also run the workflow manually from the **Actions** tab.
+
+Local production preview with the same base path as Pages:
+
+```bash
+VITE_BASE_PATH=/mtg-deck-scanner/ npm run build
+npm run preview
+```
+
+Then open the URL shown by `vite preview` (paths are rooted at `/mtg-deck-scanner/`).

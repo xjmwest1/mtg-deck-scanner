@@ -1,4 +1,5 @@
 import { explainFetchError } from "../lib/errors.ts";
+import { publicUrl } from "../lib/publicUrl.ts";
 import { fileWithSniffedType } from "./preprocess.ts";
 import { loadSamplePhoto, SAMPLE_CARD_NAMES } from "./samplePhoto.ts";
 
@@ -28,7 +29,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Cube on a playmat",
     blurb: "Overlapping columns, dice, mixed frames",
     filename: "overlapping-columns.jpg",
-    src: "/samples/overlapping-columns.jpg",
+    src: publicUrl("samples/overlapping-columns.jpg"),
     kind: "photo",
     expectedNames: [
       "Thran Dynamo",
@@ -67,7 +68,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Fanned hand",
     blurb: "Six stacked title bars",
     filename: "fanned-hand.jpg",
-    src: "/samples/fanned-hand.jpg",
+    src: publicUrl("samples/fanned-hand.jpg"),
     kind: "photo",
     expectedNames: [
       "Ogre Marauder",
@@ -83,7 +84,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Glare and angle",
     blurb: "Window light, thumb over art",
     filename: "glare-angle.jpg",
-    src: "/samples/glare-angle.jpg",
+    src: publicUrl("samples/glare-angle.jpg"),
     kind: "photo",
     expectedNames: [
       "Blood Cultist",
@@ -97,7 +98,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Close titles",
     blurb: "Tight crop, gold frame",
     filename: "close-titles.jpg",
-    src: "/samples/close-titles.jpg",
+    src: publicUrl("samples/close-titles.jpg"),
     kind: "photo",
     expectedNames: [
       "Sunhome Guildmage",
@@ -110,7 +111,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Boros warriors · d6 lands",
     blurb: "Top-down cube, three d6 on basics",
     filename: "boros-warriors-d6-lands.jpg",
-    src: "/samples/boros-warriors-d6-lands.jpg",
+    src: publicUrl("samples/boros-warriors-d6-lands.jpg"),
     kind: "photo",
     expectedNames: [
       "Archpriest of Iona",
@@ -148,7 +149,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "White aggro · d8 + d12",
     blurb: "Angled d8 Plains, d12 Mountain",
     filename: "white-aggro-d8-d12-lands.png",
-    src: "/samples/white-aggro-d8-d12-lands.png",
+    src: publicUrl("samples/white-aggro-d8-d12-lands.png"),
     kind: "photo",
     expectedNames: [
       "Usher of the Fallen",
@@ -184,7 +185,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "Jeskai · fanned basics",
     blurb: "Fanned Plains/Island, glare + foils",
     filename: "jeskai-fanned-basics.png",
-    src: "/samples/jeskai-fanned-basics.png",
+    src: publicUrl("samples/jeskai-fanned-basics.png"),
     kind: "photo",
     expectedNames: [
       "Cut Down",
@@ -204,7 +205,7 @@ export const SAMPLE_CATALOG: SampleEntry[] = [
     title: "W/B clerics · purple mat",
     blurb: "Angled columns, glare, nonbasic lands",
     filename: "wb-clerics-purple-mat.jpg",
-    src: "/samples/wb-clerics-purple-mat.jpg",
+    src: publicUrl("samples/wb-clerics-purple-mat.jpg"),
     kind: "photo",
     expectedNames: [
       "Fetid Pools",
