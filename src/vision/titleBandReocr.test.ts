@@ -99,6 +99,44 @@ describe("planTitleBandRects", () => {
     expect((firstLand?.priority ?? 999) < (firstGap?.priority ?? 999)).toBe(true);
   });
 
+  it("skips the land-row strip when landmarks already cover that row", () => {
+    const regions = [
+      region("Luminarch Aspirant", { x: 216, y: 4, width: 78, height: 16 }),
+      region("Arid Mesa", { x: 14, y: 540, width: 45, height: 15 }),
+    ];
+    const landmarks = [
+      { x: 14, y: 540, width: 48, height: 18 },
+      { x: 80, y: 542, width: 42, height: 16 },
+      { x: 140, y: 541, width: 60, height: 18 },
+      { x: 220, y: 544, width: 54, height: 16 },
+      { x: 300, y: 543, width: 50, height: 17 },
+    ];
+    const planned = collectPlannedRects(
+      { width: 1024, height: 768 },
+      regions,
+      landmarks,
+    );
+    expect(planned.some((item) => item.reason === "land-row-strip")).toBe(false);
+  });
+
+  it("plans stacked gaps from landmark bands even without OCR titles", () => {
+    const landmarks = [
+      { x: 216, y: 4, width: 78, height: 16 },
+      { x: 218, y: 70, width: 80, height: 16 },
+      { x: 213, y: 220, width: 82, height: 17 },
+    ];
+    const planned = collectPlannedRects({ width: 1024, height: 768 }, [], landmarks);
+    const gaps = planned.filter(
+      (item) =>
+        item.reason === "column-gap" &&
+        item.rect.x >= 180 &&
+        item.rect.x <= 250 &&
+        item.rect.y > 80 &&
+        item.rect.y < 210,
+    );
+    expect(gaps.length).toBeGreaterThan(0);
+  });
+
   it("fills missing stacked title bands above and below a single column anchor", () => {
     const regions = [
       region("Inti, Seneschal of the Sun", { x: 325, y: 69, width: 69, height: 15 }),

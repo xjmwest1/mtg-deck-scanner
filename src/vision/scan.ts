@@ -1,14 +1,20 @@
 import { loadCardIndex } from "../cards/cardIndex.ts";
 import { matchCardName, nameSimilarity, looksLikeTokenGibberishQuery } from "../cards/fuzzyMatch.ts";
 import { isBasicLand } from "../models/deck.ts";
-import type { CardDetection, DetectionStatus } from "../models/detection.ts";
+import type { CardDetection, DetectionStatus, OCRRegion } from "../models/detection.ts";
 import { normalizeCardName } from "../cards/normalize.ts";
 import { recognizeText, recognizeTitleBand, preloadOcr } from "./ocr.ts";
-import { reocrTitleBands } from "./titleBandReocr.ts";
+import { mergeOcrRegions, reocrTitleBands } from "./titleBandReocr.ts";
 import { annotateBasicLandCounts } from "./landPiles.ts";
 import { prepareImage, type PreparedImage } from "./preprocess.ts";
 import { expectedNamesForFilename } from "./sampleCatalog.ts";
 import { traceExpectedCards, type ScanDebug } from "./scanDebug.ts";
+import {
+  detectTitleLandmarks,
+  keepOcrInTitleLandmarks,
+  maskCanvasToTitleBands,
+  shouldMaskOcrToLandmarks,
+} from "./titleLandmarks.ts";
 import {
   bodyTextReason,
   looksLikeGarbledTitleNoise,
@@ -46,21 +52,33 @@ export async function scanDeckPhoto(
 
   await ocrPromise;
   onProgress("reading-text");
-  const initialRegions = await recognizeText(image.ocrCanvas);
+  const landmarks = detectTitleLandmarks(image.ocrCanvas);
+  const landmarkRects = landmarks.map((item) => item.rect);
+  const maskedRegions =
+    landmarks.length > 0
+      ? await recognizeTitleBand(
+          maskCanvasToTitleBands(image.ocrCanvas, landmarks),
+        )
+      : [];
+  const initialRegions = shouldMaskOcrToLandmarks(landmarks)
+    ? maskedRegions
+    : await mergeFullAndLandmarkReads(image.ocrCanvas, maskedRegions);
   onProgress("re-reading-titles");
   const reocr = await reocrTitleBands(
     image.ocrCanvas,
     initialRegions,
     recognizeTitleBand,
+    landmarkRects,
   );
   const regions = reocr.regions;
-  const filteredOut = regions.flatMap((region) => {
+  const titleRegions = keepOcrInTitleLandmarks(regions, landmarks);
+  const filteredOut = titleRegions.flatMap((region) => {
     const why = titleFilterReason(region);
     return why
       ? [{ text: region.text, confidence: region.confidence, why }]
       : [];
   });
-  const candidates = selectTitleCandidates(regions);
+  const candidates = selectTitleCandidates(titleRegions);
   const landRowY = image.height * 0.68;
 
   onProgress("matching-names");
@@ -112,6 +130,12 @@ export async function scanDeckPhoto(
     })),
     landCounts: counted.debug,
     titleBandReocr: reocr.attempts,
+    titleLandmarks: landmarks.map((item) => ({
+      rect: item.rect,
+      score: item.score,
+      cardTop: item.cardTop,
+      artTop: item.artTop,
+    })),
     traces: traceExpectedCards(
       expectedNames,
       regions,
@@ -126,6 +150,14 @@ export async function scanDeckPhoto(
   };
 
   return { image, detections, debug };
+}
+
+async function mergeFullAndLandmarkReads(
+  canvas: HTMLCanvasElement,
+  landmarkRegions: OCRRegion[],
+): Promise<OCRRegion[]> {
+  const full = await recognizeText(canvas);
+  return mergeOcrRegions(full, landmarkRegions);
 }
 
 export function suppressOverlapping(

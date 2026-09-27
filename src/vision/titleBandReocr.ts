@@ -44,10 +44,11 @@ type TitleColumn = {
 export function planTitleBandRects(
   canvas: { width: number; height: number },
   regions: OCRRegion[],
+  landmarkRects: Rect[] = [],
 ): Rect[] {
-  return prioritizePlannedRects(collectPlannedRects(canvas, regions)).map(
-    (item) => item.rect,
-  );
+  return prioritizePlannedRects(
+    collectPlannedRects(canvas, regions, landmarkRects),
+  ).map((item) => item.rect);
 }
 
 export function prioritizePlannedRects(
@@ -59,17 +60,21 @@ export function prioritizePlannedRects(
 export function collectPlannedRects(
   canvas: { width: number; height: number },
   regions: OCRRegion[],
+  landmarkRects: Rect[] = [],
 ): PlannedRect[] {
-  const columns = clusterTitleColumns(collectColumnAnchors(regions));
+  const columns = clusterTitleColumns(
+    collectColumnAnchors(regions, landmarkRects),
+  );
   if (columns.length === 0) return [];
 
-  const planned: PlannedRect[] = [
-    {
+  const planned: PlannedRect[] = [];
+  if (!landRowCoveredByRects(canvas, landmarkRects)) {
+    planned.push({
       rect: landRowStripRect(canvas),
       reason: "land-row-strip",
       priority: 0,
-    },
-  ];
+    });
+  }
 
   for (const column of columns) {
     for (const rect of gapRectsInColumn(column)) {
@@ -168,9 +173,10 @@ export async function reocrTitleBands(
   canvas: HTMLCanvasElement,
   regions: OCRRegion[],
   readBand: (input: HTMLCanvasElement) => Promise<OCRRegion[]>,
+  landmarkRects: Rect[] = [],
 ): Promise<TitleBandReocrResult> {
   const planned = prioritizePlannedRects(
-    collectPlannedRects(canvas, regions),
+    collectPlannedRects(canvas, regions, landmarkRects),
   ).slice(0, MAX_ATTEMPTS);
   if (planned.length === 0) {
     return { regions, attempts: [] };
@@ -304,7 +310,10 @@ function titleBandAtCenter(
   };
 }
 
-function collectColumnAnchors(regions: OCRRegion[]): OCRRegion[] {
+function collectColumnAnchors(
+  regions: OCRRegion[],
+  landmarkRects: Rect[] = [],
+): OCRRegion[] {
   const candidates = selectTitleCandidates(regions);
   const relaxed = regions.filter((region) => {
     if (candidates.some((item) => item === region)) return false;
@@ -316,7 +325,35 @@ function collectColumnAnchors(regions: OCRRegion[]): OCRRegion[] {
     }
     return countLetters(region.text) >= 2;
   });
-  return dedupeRegions([...candidates, ...relaxed]);
+  const extras = landmarkRects.map(rectAsAnchor);
+  return dedupeRegions([...candidates, ...relaxed, ...extras]);
+}
+
+function rectAsAnchor(rect: Rect): OCRRegion {
+  return {
+    text: "Aa",
+    confidence: 0.4,
+    polygon: [
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    ],
+    boundingBox: rect,
+  };
+}
+
+function landRowCoveredByRects(
+  canvas: { width: number; height: number },
+  rects: Rect[],
+): boolean {
+  const top = canvas.height * 0.62;
+  const bottom = canvas.height * 0.82;
+  const hits = rects.filter((rect) => {
+    const mid = rect.y + rect.height / 2;
+    return mid >= top && mid <= bottom && rect.width >= 28;
+  });
+  return hits.length >= 4;
 }
 
 function clusterTitleColumns(anchors: OCRRegion[]): TitleColumn[] {
