@@ -92,10 +92,7 @@ function enhanceContrast(
       0.2126 * (data[o] ?? 0) + 0.7152 * (data[o + 1] ?? 0) + 0.0722 * (data[o + 2] ?? 0),
     );
   }
-  const sorted = Uint8Array.from(luma);
-  sorted.sort();
-  const low = sorted[Math.floor(sorted.length * 0.02)] ?? 0;
-  const high = sorted[Math.floor(sorted.length * 0.98)] ?? 255;
+  const [low, high] = contrastPercentiles(luma);
   const span = Math.max(1, high - low);
   if (span < 48) return;
   const scale = 255 / span;
@@ -107,6 +104,38 @@ function enhanceContrast(
     }
   }
   ctx.putImageData(image, 0, 0);
+}
+
+/** 2nd / 98th percentile via histogram — O(n), no extra sort buffer. */
+function contrastPercentiles(luma: Uint8Array): [number, number] {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < luma.length; i += 1) {
+    hist[luma[i] ?? 0] += 1;
+  }
+  const total = luma.length;
+  if (total === 0) return [0, 255];
+
+  const lowTarget = Math.floor(total * 0.02);
+  const highTarget = Math.min(total - 1, Math.floor(total * 0.98));
+  let acc = 0;
+  let low = 0;
+  for (let v = 0; v < 256; v += 1) {
+    acc += hist[v] ?? 0;
+    if (acc > lowTarget) {
+      low = v;
+      break;
+    }
+  }
+  acc = 0;
+  let high = 255;
+  for (let v = 0; v < 256; v += 1) {
+    acc += hist[v] ?? 0;
+    if (acc > highTarget) {
+      high = v;
+      break;
+    }
+  }
+  return [low, high];
 }
 
 export function enhanceCanvasContrast(canvas: HTMLCanvasElement): void {
