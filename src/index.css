@@ -141,6 +141,34 @@ h1 {
   font-weight: 700;
 }
 
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.library-cta-mobile {
+  display: none;
+}
+
+.upload-camera-cta {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .library-cta-desktop {
+    display: none;
+  }
+
+  .library-cta-mobile {
+    display: inline;
+  }
+
+  .upload-camera-cta {
+    display: inline-block;
+  }
+}
+
 .sample-picker {
   margin-top: 18px;
 }
