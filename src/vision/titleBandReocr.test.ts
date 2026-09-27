@@ -6,6 +6,7 @@ import {
   mergeOcrRegions,
   planTitleBandRects,
   prioritizePlannedRects,
+  bandCropScale,
 } from "./titleBandReocr.ts";
 
 function region(
@@ -25,6 +26,14 @@ function region(
     boundingBox: box,
   };
 }
+
+describe("bandCropScale", () => {
+  it("downscales full-width land-row strips so post-crop work stays bounded", () => {
+    const scale = bandCropScale({ x: 0, y: 1140, width: 1920, height: 154 });
+    expect(scale).toBeLessThan(1);
+    expect(1920 * 154 * scale * scale).toBeLessThanOrEqual(240_000 + 1);
+  });
+});
 
 describe("planTitleBandRects", () => {
   it("schedules a gap crop between stacked titles in the same column", () => {

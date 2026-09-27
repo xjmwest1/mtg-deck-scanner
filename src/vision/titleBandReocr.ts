@@ -33,6 +33,9 @@ type PlannedRect = {
 const MAX_ATTEMPTS = 36;
 const MIN_TITLE_BAND_WIDTH = 480;
 const MIN_TITLE_BAND_HEIGHT = 36;
+/** Keep band crops small enough that contrast + sharpen stay off the jank threshold. */
+const MAX_BAND_CANVAS_PIXELS = 240_000;
+const MAX_SHARPEN_PIXELS = 80_000;
 
 type TitleColumn = {
   left: number;
@@ -202,7 +205,7 @@ async function readTitleBand(
     return primary;
   }
 
-  const expanded = expandRect(rect, canvas, 0.18, 0.85);
+  const expanded = expandRect(rect, canvas, 0.18, 0.4);
   const retry = await ocrBandRect(canvas, expanded, readBand);
   return mergeOcrRegions(primary, retry);
 }
@@ -212,9 +215,8 @@ async function ocrBandRect(
   rect: Rect,
   readBand: (input: HTMLCanvasElement) => Promise<OCRRegion[]>,
 ): Promise<OCRRegion[]> {
-  const crop = cropTitleBand(canvas, rect);
+  const crop = await cropTitleBand(canvas, rect);
   if (!crop) return [];
-  await yieldToUi();
   const local = await readBand(crop.canvas);
   return local.map((region) =>
     mapRegionToCanvas(region, crop.sourceRect, crop.scale),
@@ -491,19 +493,28 @@ function titleBandRect(column: TitleColumn, y: number, height: number): Rect {
   };
 }
 
-function cropTitleBand(
-  source: HTMLCanvasElement,
-  rect: Rect,
-): { canvas: HTMLCanvasElement; sourceRect: Rect; scale: number } | null {
-  const clipped = clipRect(rect, source);
-  if (clipped.width < 16 || clipped.height < 10) return null;
+export function bandCropScale(clipped: Rect): number {
   const widthScale = MIN_TITLE_BAND_WIDTH / clipped.width;
   const heightScale = MIN_TITLE_BAND_HEIGHT / clipped.height;
-  const scale = Math.min(
+  let scale = Math.min(
     Math.max(1, widthScale, heightScale),
     1600 / clipped.width,
     1600 / clipped.height,
   );
+  const sourcePixels = clipped.width * clipped.height;
+  if (sourcePixels > 0 && sourcePixels * scale * scale > MAX_BAND_CANVAS_PIXELS) {
+    scale = Math.sqrt(MAX_BAND_CANVAS_PIXELS / sourcePixels);
+  }
+  return scale;
+}
+
+async function cropTitleBand(
+  source: HTMLCanvasElement,
+  rect: Rect,
+): Promise<{ canvas: HTMLCanvasElement; sourceRect: Rect; scale: number } | null> {
+  const clipped = clipRect(rect, source);
+  if (clipped.width < 16 || clipped.height < 10) return null;
+  const scale = bandCropScale(clipped);
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(clipped.width * scale));
   canvas.height = Math.max(1, Math.round(clipped.height * scale));
@@ -521,8 +532,13 @@ function cropTitleBand(
     canvas.width,
     canvas.height,
   );
+  await yieldToUi();
   enhanceCanvasContrast(canvas);
-  sharpenCanvas(canvas);
+  const pixels = canvas.width * canvas.height;
+  if (pixels <= MAX_SHARPEN_PIXELS) {
+    await yieldToUi();
+    sharpenCanvas(canvas);
+  }
   return { canvas, sourceRect: clipped, scale };
 }
 
