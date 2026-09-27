@@ -52,6 +52,16 @@ const TITLE_BAND_OCR_PARAMS: OcrPredictParams = {
   textRecScoreThresh: 0.08,
 };
 
+/** Lighter band pass for dense photos — less WASM memory per crop. */
+const TITLE_BAND_LITE_OCR_PARAMS: OcrPredictParams = {
+  textDetLimitSideLen: 960,
+  textDetLimitType: "max",
+  textDetThresh: 0.1,
+  textDetBoxThresh: 0.3,
+  textDetUnclipRatio: 2,
+  textRecScoreThresh: 0.12,
+};
+
 export async function recognizeText(
   canvas: HTMLCanvasElement,
 ): Promise<OCRRegion[]> {
@@ -62,6 +72,12 @@ export async function recognizeTitleBand(
   canvas: HTMLCanvasElement,
 ): Promise<OCRRegion[]> {
   return predictRegions(canvas, TITLE_BAND_OCR_PARAMS);
+}
+
+export async function recognizeTitleBandLite(
+  canvas: HTMLCanvasElement,
+): Promise<OCRRegion[]> {
+  return predictRegions(canvas, TITLE_BAND_LITE_OCR_PARAMS);
 }
 
 async function predictRegions(
