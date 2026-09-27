@@ -1,4 +1,5 @@
 import type { OCRRegion, Point, Rect } from "../models/detection.ts";
+import type { TitleReocrSettings } from "../lib/scanConfig.ts";
 import { yieldToUi } from "../lib/yieldToUi.ts";
 import { enhanceCanvasContrast } from "./preprocess.ts";
 import {
@@ -22,6 +23,7 @@ export type TitleBandReocrAttempt = {
 export type TitleBandReocrResult = {
   regions: OCRRegion[];
   attempts: TitleBandReocrAttempt[];
+  note?: string;
 };
 
 type PlannedRect = {
@@ -171,42 +173,82 @@ export async function reocrTitleBands(
   canvas: HTMLCanvasElement,
   regions: OCRRegion[],
   readBand: (input: HTMLCanvasElement) => Promise<OCRRegion[]>,
+  settings: TitleReocrSettings,
 ): Promise<TitleBandReocrResult> {
+  if (!settings.enabled) {
+    return { regions, attempts: [], note: settings.note };
+  }
+
   const planned = prioritizePlannedRects(
     collectPlannedRects(canvas, regions),
-  ).slice(0, MAX_ATTEMPTS);
+  ).slice(0, settings.maxAttempts);
   if (planned.length === 0) {
-    return { regions, attempts: [] };
+    return { regions, attempts: [], note: settings.note };
   }
 
   const attempts: TitleBandReocrAttempt[] = [];
   let merged = regions;
+  let stalePasses = 0;
+  let lastRegionCount = merged.length;
 
   for (const item of planned) {
-    const reads = await readTitleBand(canvas, item.rect, readBand);
-    attempts.push({
-      rect: item.rect,
-      reason: item.reason,
-      texts: reads.map((region) => region.text),
-    });
-    merged = mergeOcrRegions(merged, reads);
+    await yieldToUi();
+    try {
+      const reads = await readTitleBand(
+        canvas,
+        item.rect,
+        readBand,
+        settings.allowExpandRetry,
+        settings.enhanceBands,
+      );
+      attempts.push({
+        rect: item.rect,
+        reason: item.reason,
+        texts: reads.map((region) => region.text),
+      });
+      merged = mergeOcrRegions(merged, reads);
+      if (merged.length === lastRegionCount) stalePasses += 1;
+      else {
+        stalePasses = 0;
+        lastRegionCount = merged.length;
+      }
+      if (stalePasses >= 4) {
+        return {
+          regions: merged,
+          attempts,
+          note: settings.note ?? "stopped re-OCR (no new text)",
+        };
+      }
+    } catch (error) {
+      if (isRecoverableOcrError(error)) {
+        return {
+          regions: merged,
+          attempts,
+          note: "stopped re-OCR (reader ran out of memory)",
+        };
+      }
+      throw error;
+    }
   }
 
-  return { regions: merged, attempts };
+  return { regions: merged, attempts, note: settings.note };
 }
 
 async function readTitleBand(
   canvas: HTMLCanvasElement,
   rect: Rect,
   readBand: (input: HTMLCanvasElement) => Promise<OCRRegion[]>,
+  allowExpandRetry: boolean,
+  enhanceBands: boolean,
 ): Promise<OCRRegion[]> {
-  const primary = await ocrBandRect(canvas, rect, readBand);
+  const primary = await ocrBandRect(canvas, rect, readBand, enhanceBands);
   if (primary.some((region) => titleFilterReason(region) === null)) {
     return primary;
   }
+  if (!allowExpandRetry) return primary;
 
   const expanded = expandRect(rect, canvas, 0.18, 0.4);
-  const retry = await ocrBandRect(canvas, expanded, readBand);
+  const retry = await ocrBandRect(canvas, expanded, readBand, enhanceBands);
   return mergeOcrRegions(primary, retry);
 }
 
@@ -214,13 +256,28 @@ async function ocrBandRect(
   canvas: HTMLCanvasElement,
   rect: Rect,
   readBand: (input: HTMLCanvasElement) => Promise<OCRRegion[]>,
+  enhanceBands: boolean,
 ): Promise<OCRRegion[]> {
-  const crop = await cropTitleBand(canvas, rect);
+  const crop = await cropTitleBand(canvas, rect, enhanceBands);
   if (!crop) return [];
-  const local = await readBand(crop.canvas);
-  return local.map((region) =>
-    mapRegionToCanvas(region, crop.sourceRect, crop.scale),
-  );
+  try {
+    const local = await readBand(crop.canvas);
+    return local.map((region) =>
+      mapRegionToCanvas(region, crop.sourceRect, crop.scale),
+    );
+  } finally {
+    releaseCanvas(crop.canvas);
+  }
+}
+
+function isRecoverableOcrError(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+  return /memory|wasm|worker|disposed/i.test(detail);
+}
+
+function releaseCanvas(canvas: HTMLCanvasElement): void {
+  canvas.width = 0;
+  canvas.height = 0;
 }
 
 function landRowStripRect(canvas: { width: number; height: number }): Rect {
@@ -511,6 +568,7 @@ export function bandCropScale(clipped: Rect): number {
 async function cropTitleBand(
   source: HTMLCanvasElement,
   rect: Rect,
+  enhanceBands: boolean,
 ): Promise<{ canvas: HTMLCanvasElement; sourceRect: Rect; scale: number } | null> {
   const clipped = clipRect(rect, source);
   if (clipped.width < 16 || clipped.height < 10) return null;
@@ -533,11 +591,13 @@ async function cropTitleBand(
     canvas.height,
   );
   await yieldToUi();
-  enhanceCanvasContrast(canvas);
-  const pixels = canvas.width * canvas.height;
-  if (pixels <= MAX_SHARPEN_PIXELS) {
-    await yieldToUi();
-    sharpenCanvas(canvas);
+  if (enhanceBands) {
+    enhanceCanvasContrast(canvas);
+    const pixels = canvas.width * canvas.height;
+    if (pixels <= MAX_SHARPEN_PIXELS) {
+      await yieldToUi();
+      sharpenCanvas(canvas);
+    }
   }
   return { canvas, sourceRect: clipped, scale };
 }

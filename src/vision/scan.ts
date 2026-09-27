@@ -3,7 +3,8 @@ import { matchCardName, nameSimilarity, looksLikeTokenGibberishQuery } from "../
 import { isBasicLand } from "../models/deck.ts";
 import type { CardDetection, DetectionStatus } from "../models/detection.ts";
 import { normalizeCardName } from "../cards/normalize.ts";
-import { recognizeText, recognizeTitleBand, preloadOcr } from "./ocr.ts";
+import { resolveTitleReocrSettings } from "../lib/scanConfig.ts";
+import { recognizeText, recognizeTitleBand, recognizeTitleBandLite, preloadOcr } from "./ocr.ts";
 import { reocrTitleBands } from "./titleBandReocr.ts";
 import { annotateBasicLandCounts } from "./landPiles.ts";
 import { prepareImage, type PreparedImage } from "./preprocess.ts";
@@ -48,10 +49,15 @@ export async function scanDeckPhoto(
   onProgress("reading-text");
   const initialRegions = await recognizeText(image.ocrCanvas);
   onProgress("re-reading-titles");
+  const reocrSettings = resolveTitleReocrSettings(initialRegions);
+  const readTitleBand = reocrSettings.enhanceBands
+    ? recognizeTitleBand
+    : recognizeTitleBandLite;
   const reocr = await reocrTitleBands(
     image.ocrCanvas,
     initialRegions,
-    recognizeTitleBand,
+    readTitleBand,
+    reocrSettings,
   );
   const regions = reocr.regions;
   const filteredOut = regions.flatMap((region) => {
@@ -112,6 +118,7 @@ export async function scanDeckPhoto(
     })),
     landCounts: counted.debug,
     titleBandReocr: reocr.attempts,
+    titleReocrNote: reocr.note ?? reocrSettings.note,
     traces: traceExpectedCards(
       expectedNames,
       regions,

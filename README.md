@@ -29,6 +29,8 @@ npm run dev
 
 The first scan downloads the OCR model and a local card-name catalog. After that, recognition stays on-device.
 
+**Dense or crashy photos:** append `?reocr=off` or `?fast=1` to the URL to skip the title-band re-read step (less accurate on hard photos, but stable). Use `?reocr=full` only on a desktop if you need every band retry.
+
 The home screen includes a few bundled samples: a generated overlapping-column layout, plus real photos of a cube on a playmat and fanned title bars. Sources and licenses are in [`public/samples/SOURCES.md`](./public/samples/SOURCES.md).
 
 ## GitHub Pages

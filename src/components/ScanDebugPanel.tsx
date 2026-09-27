@@ -23,6 +23,9 @@ export function ScanDebugPanel({ debug }: ScanDebugPanelProps) {
       <summary>
         Scan trace · {debug.rawOcr.length} OCR lines · {misses.length} misses
       </summary>
+      {debug.titleReocrNote ? (
+        <p className="scan-debug-note">{debug.titleReocrNote}</p>
+      ) : null}
       {debug.traces.length > 0 ? (
         <ul>
           {debug.traces.map((trace) => (
