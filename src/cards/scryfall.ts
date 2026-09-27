@@ -1,4 +1,5 @@
 import { explainFetchError } from "../lib/errors.ts";
+import { publicUrl } from "../lib/publicUrl.ts";
 
 const SCRYFALL_CARD_NAMES_URL = "https://api.scryfall.com/catalog/card-names";
 
@@ -24,7 +25,7 @@ export async function fetchOracleCardNames(): Promise<string[]> {
 
 export async function fetchLocalCardNames(): Promise<string[] | null> {
   try {
-    const response = await fetch("/card-names.json");
+    const response = await fetch(publicUrl("card-names.json"));
     if (!response.ok) return null;
     const payload = (await response.json()) as { data?: unknown };
     if (!Array.isArray(payload.data) || payload.data.some((name) => typeof name !== "string")) {

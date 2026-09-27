@@ -73,7 +73,16 @@ function ortAssets(): Plugin {
   };
 }
 
+const pagesBase = process.env.VITE_BASE_PATH?.trim();
+const base =
+  pagesBase && pagesBase !== "/"
+    ? pagesBase.endsWith("/")
+      ? pagesBase
+      : `${pagesBase}/`
+    : "/";
+
 export default defineConfig({
+  base,
   plugins: [cjsDefaultExport(), ortAssets(), react()],
   optimizeDeps: {
     exclude: ["@paddleocr/paddleocr-js", "clipper-lib", "@techstark/opencv-js"],

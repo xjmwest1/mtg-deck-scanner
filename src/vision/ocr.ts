@@ -1,3 +1,4 @@
+import { publicAbsoluteUrl } from "../lib/publicUrl.ts";
 import type { OCRRegion, Point } from "../models/detection.ts";
 import { explainFetchError } from "../lib/errors.ts";
 
@@ -115,9 +116,8 @@ async function predictOnce(
 
 async function createOcr(): Promise<OcrClient> {
   const { PaddleOCR } = await import("@paddleocr/paddleocr-js");
-  const origin = window.location.origin;
-  const detUrl = `${origin}/models/PP-OCRv5_mobile_det_onnx_infer.tar`;
-  const recUrl = `${origin}/models/PP-OCRv5_mobile_rec_onnx_infer.tar`;
+  const detUrl = publicAbsoluteUrl("models/PP-OCRv5_mobile_det_onnx_infer.tar");
+  const recUrl = publicAbsoluteUrl("models/PP-OCRv5_mobile_rec_onnx_infer.tar");
   const hasLocalModels = await resourceExists(detUrl) && await resourceExists(recUrl);
 
   const ocr = await PaddleOCR.create({
@@ -134,7 +134,7 @@ async function createOcr(): Promise<OcrClient> {
       : {}),
     ortOptions: {
       backend: "wasm",
-      wasmPaths: `${origin}/ort/`,
+      wasmPaths: publicAbsoluteUrl("ort/"),
       numThreads: 1,
       simd: true,
     },
