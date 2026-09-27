@@ -173,7 +173,28 @@ export function TrainingView({
   }
 
   function setVerdict(id: string, verdict: TrainingVerdict, correctedText?: string) {
-    setAnnotations((prev) => ({ ...prev, [id]: { verdict, correctedText } }));
+    setAnnotations((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        verdict,
+        correctedText,
+      },
+    }));
+  }
+
+  function setDetectionNote(id: string, note: string) {
+    const trimmed = note.trim();
+    setAnnotations((prev) => {
+      const current = prev[id] ?? { verdict: "unreviewed" };
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          note: trimmed || undefined,
+        },
+      };
+    });
   }
 
   function verdictOf(id: string): DetectionAnnotation {
@@ -211,6 +232,7 @@ export function TrainingView({
         box: detection.boundingBox,
         verdict: annotation.verdict,
         correctedText: annotation.correctedText,
+        note: annotation.note,
       };
     });
     const text = buildTrainingReport({
@@ -218,7 +240,11 @@ export function TrainingView({
       width,
       height,
       detections: reportDetections,
-      added: added.map((region) => ({ box: region.box, text: region.text })),
+      added: added.map((region) => ({
+        box: region.box,
+        text: region.text,
+        note: region.note,
+      })),
     });
     (window as Window & { __trainingReport?: string }).__trainingReport = text;
     // eslint-disable-next-line no-console
@@ -381,6 +407,7 @@ export function TrainingView({
           onCorrect={() => setVerdict(selectedDetection.id, "correct")}
           onReject={() => setVerdict(selectedDetection.id, "not-card")}
           onRename={(text) => setVerdict(selectedDetection.id, "corrected", text)}
+          onSaveNote={(note) => setDetectionNote(selectedDetection.id, note)}
           onClose={() => setSelected(null)}
         />
       ) : null}
@@ -392,6 +419,15 @@ export function TrainingView({
           onSave={(text) =>
             setAdded((prev) =>
               prev.map((r) => (r.id === selectedRegion.id ? { ...r, text } : r)),
+            )
+          }
+          onSaveNote={(note) =>
+            setAdded((prev) =>
+              prev.map((r) =>
+                r.id === selectedRegion.id
+                  ? { ...r, note: note.trim() || undefined }
+                  : r,
+              ),
             )
           }
           onDelete={() => {
@@ -428,12 +464,78 @@ function TrainingLabel({ x, y, text }: { x: number; y: number; text: string }) {
   );
 }
 
+function NoteField({
+  note,
+  onSave,
+}: {
+  note?: string;
+  onSave: (note: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(Boolean(note?.trim()));
+  const [value, setValue] = useState(note ?? "");
+
+  useEffect(() => {
+    setValue(note ?? "");
+    if (note?.trim()) setExpanded(true);
+  }, [note]);
+
+  if (!expanded) {
+    return (
+      <div className="training-editor-actions">
+        <button type="button" className="is-note" onClick={() => setExpanded(true)}>
+          Add note
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <textarea
+        className="training-note"
+        value={value}
+        placeholder="Optional note about this box"
+        rows={2}
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <div className="training-editor-actions">
+        <button
+          type="button"
+          onClick={() => {
+            onSave(value);
+          }}
+        >
+          Save note
+        </button>
+        {value.trim() ? (
+          <button
+            type="button"
+            className="is-not-card"
+            onClick={() => {
+              setValue("");
+              onSave("");
+              setExpanded(false);
+            }}
+          >
+            Remove note
+          </button>
+        ) : (
+          <button type="button" className="is-note" onClick={() => setExpanded(false)}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
 function DetectionEditor({
   detection,
   annotation,
   onCorrect,
   onReject,
   onRename,
+  onSaveNote,
   onClose,
 }: {
   detection: CardDetection;
@@ -441,6 +543,7 @@ function DetectionEditor({
   onCorrect: () => void;
   onReject: () => void;
   onRename: (text: string) => void;
+  onSaveNote: (note: string) => void;
   onClose: () => void;
 }) {
   const [value, setValue] = useState(
@@ -493,6 +596,7 @@ function DetectionEditor({
             Not a card
           </button>
         </div>
+        <NoteField note={annotation.note} onSave={onSaveNote} />
       </form>
     </div>
   );
@@ -501,11 +605,13 @@ function DetectionEditor({
 function RegionEditor({
   region,
   onSave,
+  onSaveNote,
   onDelete,
   onClose,
 }: {
   region: AddedRegion;
   onSave: (text: string) => void;
+  onSaveNote: (note: string) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -540,6 +646,7 @@ function RegionEditor({
             Delete box
           </button>
         </div>
+        <NoteField note={region.note} onSave={onSaveNote} />
       </form>
     </div>
   );

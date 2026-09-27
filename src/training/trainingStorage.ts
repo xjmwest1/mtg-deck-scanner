@@ -21,11 +21,13 @@ export type PersistedDetectionAnnotation = {
   name?: string;
   verdict: TrainingVerdict;
   correctedText?: string;
+  note?: string;
 };
 
 export type PersistedAddedRegion = {
   box: NormalizedRect;
   text: string;
+  note?: string;
 };
 
 export type PersistedTrainingLabels = {
@@ -110,13 +112,16 @@ export function buildPersistedLabels(
 
   for (const detection of detections) {
     const annotation = annotations[detection.id];
-    if (!annotation || annotation.verdict === "unreviewed") continue;
+    if (!annotation) continue;
+    const hasNote = Boolean(annotation.note?.trim());
+    if (annotation.verdict === "unreviewed" && !hasNote) continue;
     persistedDetections.push({
       box: normalizeRect(detection.boundingBox, width, height),
       detectedText: detection.detectedText,
       name: detection.name,
       verdict: annotation.verdict,
       correctedText: annotation.correctedText,
+      note: annotation.note?.trim() || undefined,
     });
   }
 
@@ -126,10 +131,11 @@ export function buildPersistedLabels(
     updatedAt: new Date().toISOString(),
     detections: persistedDetections,
     added: added
-      .filter((region) => region.text.trim().length > 0)
+      .filter((region) => region.text.trim().length > 0 || Boolean(region.note?.trim()))
       .map((region) => ({
         box: normalizeRect(region.box, width, height),
         text: region.text.trim(),
+        note: region.note?.trim() || undefined,
       })),
   };
 }
@@ -170,6 +176,7 @@ export function applyPersistedLabels(
     annotations[bestId] = {
       verdict: saved.verdict,
       correctedText: saved.correctedText,
+      note: saved.note,
     };
     restoredCount += 1;
   }
@@ -178,6 +185,7 @@ export function applyPersistedLabels(
     id: crypto.randomUUID(),
     box: denormalizeRect(region.box, width, height),
     text: region.text,
+    note: region.note,
   }));
   restoredCount += added.length;
 
