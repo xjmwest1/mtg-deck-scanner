@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { loadCatalogSample, SAMPLE_CATALOG } from "../vision/sampleCatalog.ts";
 
 type PhotoUploaderProps = {
@@ -7,10 +8,18 @@ type PhotoUploaderProps = {
 };
 
 export function PhotoUploader({ disabled, onSelect, onError }: PhotoUploaderProps) {
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
   function handleFiles(files: FileList | null) {
     const file = files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
     onSelect(file);
+  }
+
+  function resetInput(event: React.ChangeEvent<HTMLInputElement>) {
+    handleFiles(event.target.files);
+    event.target.value = "";
   }
 
   function chooseSample(id: string) {
@@ -25,7 +34,7 @@ export function PhotoUploader({ disabled, onSelect, onError }: PhotoUploaderProp
 
   return (
     <section className="uploader">
-      <label
+      <div
         className="dropzone"
         onDragOver={(event) => {
           event.preventDefault();
@@ -37,14 +46,19 @@ export function PhotoUploader({ disabled, onSelect, onError }: PhotoUploaderProp
         }}
       >
         <input
+          ref={libraryInputRef}
+          type="file"
+          accept="image/*"
+          disabled={disabled}
+          onChange={resetInput}
+        />
+        <input
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           disabled={disabled}
-          onChange={(event) => {
-            handleFiles(event.target.files);
-            event.target.value = "";
-          }}
+          onChange={resetInput}
         />
         <span className="dropzone-kicker">Photograph or upload</span>
         <strong>Lay the deck in overlapping columns so every name stays visible.</strong>
@@ -52,8 +66,26 @@ export function PhotoUploader({ disabled, onSelect, onError }: PhotoUploaderProp
           This first version reads English card titles in the browser, matches
           them to known Magic names, and lets you tap anything that looks wrong.
         </p>
-        <span className="dropzone-cta">Choose a photo</span>
-      </label>
+        <div className="upload-actions">
+          <button
+            type="button"
+            className="dropzone-cta"
+            disabled={disabled}
+            onClick={() => libraryInputRef.current?.click()}
+          >
+            <span className="library-cta-desktop">Choose a photo</span>
+            <span className="library-cta-mobile">Photo library</span>
+          </button>
+          <button
+            type="button"
+            className="dropzone-cta button-secondary upload-camera-cta"
+            disabled={disabled}
+            onClick={() => cameraInputRef.current?.click()}
+          >
+            Take a photo
+          </button>
+        </div>
+      </div>
 
       <div className="sample-picker">
         <p className="dropzone-kicker">Try a sample</p>
